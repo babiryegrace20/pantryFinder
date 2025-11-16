@@ -1,0 +1,438 @@
+# Food Pantry Finder — Requirements Document (for Replit / ReactJS)
+
+Friendly, complete requirements you can paste into Replit or hand to a dev team. This covers product goals, user flows, data model, API surface, UI structure, realtime design, privacy/security, testing, deployment notes and acceptance criteria.
+
+---
+
+# 1 — Project summary
+
+**Name:** Food Pantry Finder (St. Joseph County, IN)
+**Brief:** A web application (React front end) that helps individuals find nearby food pantries with the food categories they need and lets pantry staff publish realtime inventory/availability to reduce waste and improve matching. Think “DoorDash for food pantries” — but for delivery/collection and availability information.
+
+---
+
+# 2 — Goals & success metrics
+
+**Goals**
+
+* Provide real-time availability of food items at pantries.
+* Help people in need find the nearest pantry that has specific food categories.
+* Reduce food waste by enabling pantries to publish soon-to-expire or surplus items.
+* Enable planning/prediction on demand and supply.
+* Preserve dignity through privacy-first design and eligibility checks.
+
+**Success metrics (examples)**
+
+* Average time to match individual with a pantry (target: <30s for search).
+* Reduction in reported wasted items at participating pantries.
+* % of pantries updating inventory at least once per week.
+* Number of successful pickups/requests per week.
+
+---
+
+# 3 — Stakeholders & user roles
+
+* **Individual (visitor)** — searches, creates profile, requests food, views eligibility.
+* **Pantry staff (pantry-admin)** — manages pantry profile, updates inventory/availability, confirms pickups.
+* **System admin (super-admin)** — manage users, pantries, moderate data, run analytics.
+* **Third-party integrators** — delivery partners or volunteer drivers (future).
+
+---
+
+# 4 — Key user stories (prioritized)
+
+1. As an Individual, I can search for nearby pantries that currently have items in my desired food category.
+2. As an Individual, I can create a profile (family size, dietary restrictions), save addresses, and view eligibility checks.
+3. As an Individual, I can request an item or schedule pickup/delivery.
+4. As a Pantry staff, I can update inventory in realtime (add categories, quantity, expiration).
+5. As a Pantry staff, I can mark items as “surplus — free pickup” to avoid waste.
+6. As a System admin, I can view analytics and the total number of pantries in realtime.
+7. As an Individual, I can view step-by-step directions and contact info for a pantry.
+
+---
+
+# 5 — Functional requirements
+
+## 5.1 Search & matching
+
+* Geolocation-based search: input address or use browser location.
+* Filter by food category (e.g., canned, produce, baby formula) and eligibility.
+* Sort by distance, availability, or earliest-expiring items.
+* Show estimated travel time (if API integrated) and directions link.
+
+## 5.2 Profiles & eligibility
+
+* Individual profile: name (optional), contact method (phone/email), family size, dietary notes, eligibility attributes (income bracket, referral code — if required).
+* Eligibility check: configurable rules per pantry (e.g., zip codes served, income threshold). System must evaluate and return boolean + reason.
+
+## 5.3 Pantry inventory & operations
+
+* Pantry profile: name, address, hours, contact, capacity, service area, tags.
+* Inventory model: category, item name, quantity, unit (lbs/units), expirationDate (optional), status (available, reserved, claimed).
+* Realtime update API for quick inventory pushes from pantry dashboard or mobile staff UI.
+* Ability to mark items as “surplus” or “urgent pickup”.
+
+## 5.4 Requests & confirmations
+
+* Individuals can request items, which creates a reservation.
+* Pantries can accept/decline requests and update status.
+* Notifications: push (optional), SMS or email (via Twilio/SendGrid) on request confirmation & pickup instructions.
+
+## 5.5 Realtime & analytics
+
+* Realtime updates to availability and number of active pantries.
+* Administrative dashboard with demand/supply metrics and trends.
+
+---
+
+# 6 — Non-functional requirements
+
+* **Frontend:** React (functional components + hooks), responsive (mobile-first).
+* **Realtime:** WebSockets (Socket.IO) or Firebase/Firestore realtime.
+* **Performance:** Search results <500ms for local queries.
+* **Scalability:** Support growing number of pantries and users.
+* **Availability:** 99% uptime target (hosted on Replit initially; consider dedicated hosting later).
+* **Privacy:** Minimal PII stored, follow best practices (encrypt contact data at rest).
+* **Accessibility:** WCAG 2.1 AA.
+
+---
+
+# 7 — Tech stack (recommended)
+
+* **Frontend:** React, React Router, Context or Redux for state.
+* **Styling:** Tailwind CSS (or CSS modules).
+* **Maps:** Mapbox GL JS or Google Maps (geocoding & distance). (Mapbox has a generous free tier.)
+* **Backend (suggested options):**
+
+  * Option A (serverless, faster dev): Firebase (Authentication, Firestore, Realtime), Cloud Functions.
+  * Option B (more control): Node.js + Express + PostgreSQL (hosted via Supabase for realtime DB + auth).
+* **Realtime:** Firestore realtime listeners or Socket.IO on Express.
+* **Notifications:** Twilio (SMS) + SendGrid (email).
+* **Deployment / hosting:** Replit for prototype; consider Vercel or Netlify + serverless functions for production.
+* **CI / tests:** Jest + React Testing Library, Playwright for E2E.
+
+> For Replit specifically: a React app + REST backend (Express) can be created in the same Replit project or using a separate Replit for a server. Supabase/Firebase are recommended to avoid managing servers for realtime features.
+
+---
+
+# 8 — Data model (core entities)
+
+Use whichever DB; below is normalized relational form:
+
+**Users**
+
+* id (uuid)
+* role (individual | pantry-admin | admin)
+* name
+* email
+* phone (optional)
+* hashed_password (if using local auth)
+* createdAt, updatedAt
+* profile: family_size, dietary_restrictions (json), default_address_id
+
+**Addresses**
+
+* id, user_id, street, city, state, zip, lat, lon
+
+**Pantries**
+
+* id
+* name
+* address fields + lat, lon
+* hours (json)
+* contact_email, contact_phone
+* service_area (zip array or polygon)
+* accepted_eligibility_rules (json)
+* createdAt, updatedAt
+* status (active | inactive)
+
+**InventoryItems**
+
+* id
+* pantry_id
+* category (enum/string)
+* name
+* quantity
+* unit
+* expirationDate (nullable)
+* notes
+* status (available, reserved, claimed)
+* lastUpdated
+
+**Requests / Reservations**
+
+* id
+* user_id
+* pantry_id
+* inventory_item_id (nullable if a category-level request)
+* requested_items (json)
+* status (pending | accepted | declined | completed | cancelled)
+* createdAt, updatedAt
+
+**AuditLogs / Events**
+
+* id, type, payload (json), createdAt
+
+---
+
+# 9 — API surface (REST + Realtime)
+
+## REST examples
+
+* `POST /api/auth/signup` — create user (email/password) or via OAuth.
+* `POST /api/auth/login`
+* `GET /api/pantries?lat=&lon=&category=&radius_km=&eligibility=true` — search & filter
+* `GET /api/pantry/:id` — pantry details + inventory snapshot
+* `POST /api/pantry` — create pantry (admin only)
+* `PUT /api/pantry/:id/inventory` — inventory update (pantry-admin)
+* `POST /api/request` — create reservation
+* `PUT /api/request/:id/status` — update request (pantry updates)
+* `GET /api/admin/metrics` — analytics (admin only)
+
+## Realtime (WebSocket/Firebase)
+
+* Channel: `inventory-updates:{pantryId}` — broadcast inventory changes
+* Channel: `pantry-status-changes` — new pantries / removed pantries
+* Channel: `request-updates:{requestId}` — request accepted / claimed
+
+---
+
+# 10 — Frontend structure (React)
+
+Suggested file/component structure:
+
+```
+/src
+  /components
+    Header.jsx
+    Footer.jsx
+    SearchBar.jsx
+    PantryCard.jsx
+    InventoryList.jsx
+    MapView.jsx
+    EligibilityModal.jsx
+  /pages
+    Home.jsx
+    SearchResults.jsx
+    PantryDashboard.jsx (pantry-admin)
+    Profile.jsx
+    RequestDetails.jsx
+    AdminDashboard.jsx
+  /services
+    api.js
+    auth.js
+    realtime.js
+  /contexts
+    AuthContext.js
+    SearchContext.js
+  App.jsx
+  index.jsx
+```
+
+**Key pages/components**
+
+* **Home/Search** — search bar, filters (category, radius, eligibility), map + list of results.
+* **Pantry details** — inventory, hours, contact, request button.
+* **Pantry admin dashboard** — quick inventory editor, urgent items list, view requests.
+* **Profile** — family size, addresses, saved preferences.
+* **Admin dashboard** — realtime counts, metrics, moderation.
+
+**UX notes**
+
+* Keep identity minimal and optional to preserve dignity: allow anonymous searches, but require minimal contact only when a request is made.
+* Use respectful language and clear CTAs for requesting help.
+
+---
+
+# 11 — UI/UX wireframes & flows (brief)
+
+1. **Landing / Search**
+
+   * Top: location input / “Use my location”.
+   * Filters: Category (multi-select), family size (affects eligibility).
+   * Map on left, list on right (or stacked on mobile).
+2. **Pantry card**
+
+   * Name, distance, badges (urgent/surplus), top 3 available items, hours, “Request” button.
+3. **Request flow**
+
+   * Choose items / quantity -> confirm eligibility -> optional message -> request sent -> pantry accepts/declines -> notification.
+4. **Pantry staff flow**
+
+   * Quick inventory add/update form (category, qty, expiration).
+   * Big red “Surplus — urgent pickup” toggle to flag items prominently.
+
+---
+
+# 12 — Security & privacy
+
+* Use HTTPS (Replit provides TLS).
+* Authentication: Use OAuth or secure email/password with hashed + salted passwords (bcrypt).
+* Minimal PII: make fields optional; don’t publicly show user names on listings.
+* Data encryption at rest for contact info (if DB supports).
+* Audit logs for sensitive actions.
+* Rate-limit public APIs to prevent scraping.
+* GDPR/CCPA considerations: data deletion endpoints, export.
+
+---
+
+# 13 — Realtime & mapping decisions (implementation options)
+
+**Realtime**
+
+* **Firebase / Firestore** — simplest for realtime listeners and auth. Good for prototype on Replit.
+* **Supabase** — Postgres + realtime via replication; gives relational DB with realtime.
+* **Custom** Node/Socket.IO — more control; needs server on Replit.
+
+**Maps / geocoding**
+
+* **Mapbox** — geocoding & tile rendering; good free tier.
+* **Google Maps** — well-known but costs can accumulate.
+* Consider offline fallback: simple distance calculation (Haversine) when API is absent.
+
+---
+
+# 14 — Environment & secrets (env vars to set in Replit)
+
+* `REACT_APP_API_BASE_URL`
+* `REACT_APP_MAPBOX_KEY` or `REACT_APP_GOOGLE_MAPS_KEY`
+* `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, etc. (if using Firebase)
+* `SUPABASE_URL`, `SUPABASE_KEY` (if using Supabase)
+* `TWILIO_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`
+* `SENDGRID_API_KEY`
+* `JWT_SECRET` (if using JWT)
+* Database connection string
+
+---
+
+# 15 — Testing & QA
+
+* Unit tests for core components (Jest + React Testing Library).
+* Integration tests for API endpoints (supertest for Node).
+* E2E: Playwright to test flows: search → request → pantry accept.
+* Accessibility checks: axe-core.
+
+---
+
+# 16 — Monitoring & analytics
+
+* Capture errors (Sentry).
+* Track events: searches, requests, pantry updates (Mixpanel or Plausible).
+* Admin dashboard with: active pantries count, daily requests, flagged surplus items.
+
+---
+
+# 17 — Deployment & Replit notes
+
+* Create a Replit with two options:
+
+  * **Monorepo (recommended for early prototype):** React frontend + Express server in same repl. Start script runs both via `concurrently`.
+  * **Frontend-only:** host React on Replit static; use Firebase/Supabase for backend.
+* Replit run command example (package.json scripts):
+
+```json
+"scripts": {
+  "start": "concurrently \"npm run start:client\" \"npm run start:server\"",
+  "start:client": "cd client && npm run start",
+  "start:server": "cd server && node index.js"
+}
+```
+
+* For production, prefer Vercel/Netlify for frontend and Heroku/Render or Supabase functions for backend.
+
+---
+
+# 18 — Roadmap / milestones (MVP-focused)
+
+**MVP (v0.1)** — core flows
+
+* Basic search by location + category
+* Pantry profile + inventory update UI
+* Request/accept flow (email confirmation)
+* Basic eligibility rules (zip-based)
+* Realtime updates via Firestore or simple polling
+
+**v0.2**
+
+* Notifications (SMS)
+* Admin analytics
+* Surplus/urgent item highlights
+* Map directions & travel time
+
+**v1.0**
+
+* Predictive analytics for demand
+* Delivery/volunteer matching
+* Full audit and compliance features
+
+---
+
+# 19 — Acceptance criteria (for MVP)
+
+* Individuals can search by category and location and receive at least 5 matching pantries within 20 km (if present).
+* Pantry admin can add/update inventory and changes appear to searching users in <5 seconds (via realtime or poll).
+* Individuals can make a request and pantry receives a notification; pantry can accept/decline.
+* Realtime count of active pantries updates when a pantry toggles active/inactive.
+
+---
+
+# 20 — Example API payloads
+
+**Search request**
+
+```http
+GET /api/pantries?lat=41.6764&lon=-86.25199&category=canned&radius_km=10
+```
+
+**Inventory update**
+
+```json
+POST /api/pantry/123/inventory
+Authorization: Bearer <token>
+{
+  "items": [
+    {"category":"canned","name":"Canned Corn","quantity":40,"unit":"units","expirationDate":"2025-12-15"},
+    {"category":"produce","name":"Apples","quantity":35,"unit":"lbs","expirationDate":"2025-11-18","surplus":true}
+  ]
+}
+```
+
+**Request**
+
+```json
+POST /api/request
+{
+  "userId":"abc",
+  "pantryId":"123",
+  "items":[{"category":"canned","name":"Canned Corn","quantity":4}],
+  "pickup": {"type":"in-person","time":"2025-11-19T15:00:00"}
+}
+```
+
+---
+
+# 21 — Developer recommendations & gotchas
+
+* Start with Firebase/Firestore to get auth + realtime quickly for prototype on Replit.
+* Use cautious defaults for PII and make contact methods optional unless required for a request.
+* For geocoding, cache results and reverse geocode addresses server-side to avoid hitting API limits.
+* Implement inventory “soft deletes” and a clear audit trail for item quantities.
+* Build a simple CSV import for pantries to speed onboarding.
+
+---
+
+# 22 — Deliverables you can paste into Replit
+
+* `README.md` with above summary and environment variable instructions.
+* Minimal `client/` React app scaffold (create-react-app or Vite).
+* Minimal `server/` Express app with endpoints above (or Firebase cloud functions).
+* Sample seed script to create a few pantries in St. Joseph County (incl. lat/lon).
+
+---
+
+If you want, I can:
+
+* generate a starter `package.json`, `App.jsx`, and `server/index.js` scaffold you can paste directly into Replit; **or**
+* create an example Firestore data seed script for 5 sample pantries in St. Joseph County (with lat/lon) so you can prototype the map & search right away.
+
+Which of those would you like me to produce now?
